@@ -1,0 +1,486 @@
+---
+title: "Multiverse analysis study - Tutorial"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Introduction
+
+Data analyses for any scientific research in an iterative, multi-stage process.
+The statistical results that are reported in a published paper are usually one
+of many reasonable analyses arising from the iterative process. A multiverse
+analysis aims to increase transparency by performing multiple analyses on a
+given dataset based on a set of defensible analysis procedures. In this 
+tutorial, we will look at a simple example and you will complete extend the
+example in the following activity.
+
+## Learning objectives
+
+In this tutorial, you will practice defining and exploring a set of multiple
+analyses for a given dataset in R. You will:
+
++ define multiple models using a inclusion-exclusion table and `apply()`,
++ fit the models using `lapply()`,
++ extract and save quantities of interest from the fitted models, and
++ organize and visualize the extracted quantities to help answer a research 
+  question.
+
+## Data
+
+We are given a dataset that contains information on mortgage applications made 
+in 1990 in Boston. We can read the dataset and store it in `hdma` as shown 
+below. You can run the code below by clicking the green arrow button on the
+right of the code chunk or pressing 'Ctrl + Shift + Enter' with your cursor 
+inside the code chunk to view the dataset.
+
+```{r}
+# the dataset is stored in the file named hdma.csv
+hdma <- read.csv("hdma.csv")
+hdma 
+```
+
+Each row of the dataset represents a mortgage application with the following
+information in the columns:
+
++  `is_approved` is 1 if the application was approved and 0 otherwise.
++  `is_female` is 1 if the applicant was a female and 0 otherwise.
++  `is_black` is 1 if the applicant was a black or Hispanic and 0 if the 
+applicant was non-Hispanic white. The dataset does not contain other races.
++  `is_married` is 1 if the applicant was married and 0 otherwise.
++  `is_housing_expense_ratio_high` is 1 if the bank's calculation of housing
+expense over income exceeds 30% and 0 otherwise.
++  `is_self_employed` is 1 if the applicant was self-employed and 0 otherwise.
++  `is_bad_credit` is 1 if the applicant had one or more public records such as
+bankruptcy, charge offs, and collection actions and 0 otherwise.
++  `payment_income_ratio` is the bank's calculation of total debt payment over
+income in percentages.
++  `loan_to_value_ratio` is the value of the loan amount over the appraisal
+value of the property in percentages.
+
+## Research question
+
+We are interested in answering the following research question.
+
+> Did mortgage providers approve an application differently based on the 
+applicant's sex in Boston in 1990?
+
+To answer the question, we can conduct a hypothesis test with the following
+set of hypotheses.
+
+> - $H_0$: No, they were as likely to approve female applicants as male 
+applicants.
+> - $H_1$: Yes, they were either more likely or less likely to approve female
+applicants than male applicants.
+
+We will conduct the test at 5% significance level, or 95% confidence level.
+
+_Recall that a hypothesis test investigates whether a given data set provides
+evidence against the null hypothesis, $H_0$, which leads to the that the 
+alternative hypothesis, $H_1$ is true._
+
+
+## A simple linear regression model
+
+One way to conduct the hypothesis test for the given research question is the 
+t-test for a single regression coefficient in a linear regression model. For
+example, we can fit the following simple linear regression model.
+
+$$IsApproved_i = \beta_0 + \beta_1 IsFemale_i + \varepsilon_i$$
+
+where $IsApproved_i$ is `is_approved` and $IsFemale_i$ is `is_female` for $i$th
+application in the dataset `hdma`. 
+
+In R, we can write the formula as 
+`is_approved ~ is_female`. To fit the linear regression model, we can pass the 
+formula and along with the dataset to the function `lm()` as below. Calling the
+`summary()` function on the fitted object provides a quick summary of the model.
+
+__Run__ the code below. This provides a summary of the fitted simple linear 
+regression model.
+
+```{r}
+fit <- lm(formula = is_approved ~ is_female, data = hdma)
+summary(fit)
+```
+
+The summary table provides the estimated coefficient of the term $IsFemale$, 
+which is 0.004919. Recall that in the given dataset, a unit increase in 
+$IsFemale$ indicates the applicant's sex being female, 1, vs. male, 0. Thus,
+the coefficient is the mean gain in $IsApproved$ for female applicants vs.
+male applicants. $IsApproved$ was also encoded using 0 and 1 with 1 indicating
+an approved application. One way to interpret the result is that female 
+applicants were approved for their mortgage applications with 0.4919% higher
+probability on average. However, this value does not indicate whether the
+difference is statistically significant.
+
+The table provides the two-sided p-value for $IsFemale$, 0.762. When this 
+value is smaller than the predefined significance level, we could conclude that 
+the coefficient for $IsFemale$ does not equal to 0 at the significance level.
+In this case, since it is larger than our significance level, 0.05, we conclude
+that the result is not statistically significant and do not reject the null
+hypothesis.
+
+> Using the the simple linear regression model, we do not find statistically
+significant evidence that an applicant's sex was relevant in the probability
+of approval for their mortgage application. We fail to reject the null 
+hypothesis that mortgage providers were as likely to approve female applicants
+as male applicants.
+
+Alternatively, we can extract the 95% confidence interval for the coefficient
+estimate using `confint()`. The function by default outputs a table with 95% 
+confidence intervals for all coefficients and the intercept. We can extract 
+confidence interval for the $IsFemale$ term only by using the row name. 
+
+__Run__ the code below. The code displays both the table of confidence intervals 
+for all terms and the confidence interval extracted for the $IsFemale$ term.
+
+```{r}
+ci <- confint(fit)
+ci # all confidence intervals
+ci[row.names(ci) == "is_female", ] # extracting the is_female coefficient ci
+```
+
+_Recall that in R, you can select a subset of the rows in a table by passing
+the desired condition in the first index while leaving the second index empty,
+`<table>[<condition> , ]`._
+
+We can make the same conclusion that we can not reject the null hypothesis based
+on the fact that the confidence interval, (-0.027, 0.037), includes 0.
+
+### _Practice_
+
+Mortgage providers consider the applicant's financial information when assessing
+an application. One may argue that the analysis above doesn't consider this and
+that the following model is a better model to answer the research question.
+
+$$IsApproved_i = \beta_0 + \beta_1 IsFemale_i + \beta_2 PaymentIncomeRatio_i + \varepsilon_i$$
+
+where $IsApproved_i$ is `is_approved`, $IsFemale_i$ is `is_female`, and 
+$PaymentIncomeRatio_i$ is `payment_income_ratio` for $i$th application in the 
+dataset `hdma`. 
+
+In the code chunk provided below, fit the multiple linear regression defined
+above and extract the 95% confidence interval for the $IsFemale$ term.
+
+```{r}
+# write your code here
+
+```
+
+## Multiverse analysis 
+
+The dataset includes more than the payment to income ratio for each application.
+It includes other information about the applicant's financial information as
+well as other demographic information. The mortgage providers also had access
+to them when making their decisions. However, it's difficult to say that all of
+the information were relevant when making the decisions on the approvals. 
+
+Assume that any combination of the extra variables, or covariates, included in 
+the dataset makes a defensible model for answering the research question. A 
+multiverse analysis analyzes and reports results from all of the defensible 
+models. For this tutorial, we will only consider `payment_income_ratio` and 
+`is_married` as covariates.
+
+### Defining the multiverse
+
+With the 2 covariates, we can construct 4 defensible models in the following 
+ways:
+
+1. Do not include either `payment_income_ratio` or `is_married`
+2. Include only `payment_income_ratio`
+3. Include only `is_married`
+4. Include both `payment_income_ratio` and `is_married`
+
+In R, we can construct the formulae using all possible combinations of the two
+covariates programmatically. 
+
+__Run__ each of the code chunks below to construct the formulae step by step. 
+
+1. Save the base formula `is_approved ~ is_female` to a variable.
+
+```{r}
+base_formula <- "is_approved ~ is_female"
+```
+
+2. Build a table that indicates the covariates to include in each model. 
+`expand.grid()` creates a data frame that contains all possible combinations
+of the values in each input vector. In each column of `ie_table`, `TRUE` 
+indicates that the covariate is included and `FALSE` indicates it is not. Each 
+row represents a possible combination and you should see 4 rows.
+
+```{r}
+ie_table <- expand.grid(payment_income_ratio = c(TRUE, FALSE),
+                        is_married = c(TRUE, FALSE))
+ie_table
+```
+
+3. Construct the formulae based on the table. We will make us of `apply()`. For 
+each row, we will identify and add the covariate(s) indicated by the row to the 
+base formula.
+
+> `apply()` allows you to peform a task repeatedly using one row at a time from 
+a table and save the results in a vector.
+
+```{r}
+covariates <- c("payment_income_ratio", "is_married")
+# MARGIN = 1 indicates that we will apply the FUN along the rows
+formulae <- apply(X = ie_table, MARGIN = 1, FUN = function(x) {
+  # x is a row from ie_table evaluated one at a time
+  # covariates[x] picks the covariate values where x is TRUE
+  # paste(c(...), collapse = " + ") connects the elements in c(...) by " + " 
+  #   into a single string
+  paste(c(base_formula, covariates[x]), collapse = " + ")
+})
+formulae
+```
+
+_Note that all 4 models include `is_approved` as the response variable and 
+`is_female` as an explanatory variable since we are interested in the 
+relationship between the two._
+
+You can check that `formualae` indeed stores 4 items using `length()`. Storing
+the value to a variable is also useful in the following steps.
+
+```{r}
+n_options <- length(formulae)
+n_options
+```
+
+
+### Fitting the multiverse
+
+To fit the 4 models, we will use `lapply()`. 
+
+> Similar to `apply()`, `lapply()` allows you to perform a task repeatedly. The
+input can be a vector. The output will be a list.
+
+For example, the following `lapply()` applied to the vector `formulae` 
+calculates the number of characters for each item and saves them in a list. Note
+that you need double square brackets to access the individual items in a list.
+
+```{r}
+lapply(formulae, function(x) nchar(x))
+```
+
+For each of the model in the multiverse, we will
+
+1. fit the linear regression model using the dataset `hdma`,  
+2. extract the coefficient estimate and 95% confidence interval for `is_female`, 
+and
+3. store the extracted estimate and confidence interval.
+
+__Run__ the code below. You should see a list of 4 vectors. Each vector consists
+of the coefficient estimates followed by the 95% confidence intervals for 
+`is_female`.
+
+```{r}
+results_list <- lapply(formulae, function(x) {
+  fit <- lm(x, data = hdma)
+  # coefficients() extracts the coefficient estimates 
+  ests <- coefficients(fit)
+  cis <- confint(fit)
+  # extract the values for `is_female`
+  est_is_female <- ests[names(ests) == "is_female"]     # ests is a vector
+  ci_is_female <- cis[row.names(cis) == "is_female", ]  # cis is a table
+  # return the coefficient estimate and the confidence interval in a vector
+  return(c(est_is_female, ci_is_female))
+})
+results_list
+```
+
+_Note that because `ests` is a 1-dimensional vector, you need to filter using a
+1-dimensional index, `[]`. Also, the vector only works with `names()` not 
+`row.names()`._
+
+
+### Exploring the multiverse
+
+In this tutorial example, we only considered decisions around inclusion and 
+exclusion of 2 out of 7 covariates. As you will see in the following activity,
+a multiverse analysis can be complex and large. It is therefore important to
+organize and represent the results in a human-readable format to help answering 
+the research question.
+
+First, we will present the result in a table. 
+
+__Run__ each of the code chunks below. 
+
+1. Combine the vectors in `results_list` into a single table.
+
+```{r}
+# do.call(ribnd, a_list) combines items in a_list row wise.
+results <- do.call(rbind, results_list)
+results
+```
+
+2. Create a data frame by putting the `results` table and `formulae` vector 
+together with meaningful column names.
+
+```{r}
+# Define a data frame using the `results` table.
+multiverse_table <- as.data.frame(results) 
+# Provide meaningful column names.
+colnames(multiverse_table) <- c("Estimate", "LowerCI", "UpperCI")
+# Add the vector `formulae` as the first column to the data frame.
+multiverse_table <- cbind(Model = formulae, multiverse_table)
+multiverse_table
+```
+
+We now have a table that presents the results from the multiverse analysis in a
+human-readable manner. From the table, we can see that all 4 analyses resulted
+in 95% confidence intervals that contain 0. We can also see from the table that
+including `is_married` as the covariate alone resulted in the largest
+coefficient estimate.
+
+Visualizing the table can help explore and deduce conclusions from the 
+multiverse analysis. We will use `ggplot2` library to visualize the results.
+
+__Run__ each of the code chunks below to construct a plot showing the estimates
+and the 95% confidence intervals from the 4 models. You can display the plot
+object in intermediate steps by calling `p`.
+
+1. Load the library.
+
+```{r}
+library(ggplot2)
+```
+
+2. Define a canvas using the data. We will place `Model` along the y-axis. 
+`aes()` allows mapping between the data frame's columns and the plot's axes
+and other aesthetic properties.
+
+```{r}
+p <- ggplot(multiverse_table, aes(y = Model)) 
+```
+
+
+3. Add points for `Estimate` values. `geom_point()` places points using values 
+mapped to `x` and `y`. 
+
+```{r}
+p <- p + geom_point(aes(x = Estimate))
+```
+
+4. Add lines representing the confidence intervals. `geom_linerange()` can place
+line segments using values mapped to `xmin`, `xmax`, and `y`.
+
+```{r}
+p <- p + geom_linerange(aes(xmin = LowerCI, xmax = UpperCI))
+```
+
+5. To highlight whether the confidence intervals cross 0, we can add a vertical
+line at 0. `geom_vline()` adds a vertical line at `xintercept`. We will also
+specify `linetype = "dotted"` to distinguish the vertical line from the
+confidence intervals.
+
+```{r}
+p <- p + geom_vline(xintercept = 0, linetype = "dotted") 
+```
+
+6. Optionally, you can use a different theme such as `theme_minimal()`. It may
+help achieve a clean look that highlights plotted objects.
+
+```{r}
+p <- p + theme_minimal()
+p
+```
+
+
+From the plot above, we can tell that while all 4 models resulted in positive
+coefficient estimates, the 95% confidence intervals all contain 0. To highlight
+which model resulted in the largest estimate of the `is_female` coefficient,
+we can sort the y-axis according to the value of `Estimate`.
+
+__Run__ the code below. To sort character values along an axis in `ggplot()`,
+we need to define it as a factor with the levels indicating the order.
+
+```{r}
+multiverse_table$Model <- factor(
+  multiverse_table$Model, 
+  # define levels according to the order of `Estimate`
+  levels = multiverse_table$Model[order(multiverse_table$Estimate)]
+)
+
+ggplot(multiverse_table, aes(y = Model)) +
+  geom_point(aes(x = Estimate)) +
+  geom_linerange(aes(xmin = LowerCI, xmax = UpperCI)) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  theme_minimal()
+```
+
+Looking at the plot, it's clear that including `is_married` in the regression 
+model resulted in higher coefficient estimates for `is_female`. To highlight the
+comparison between models with and without `is_married`, we can explicitly group
+the values by whether the model includes `is_married`.
+
+__Run__ the code below. Recall that `ie_table` specifies which covariates are
+included in each model. `facet_grid()` can create facets or subplots grouped by 
+specified variable in rows (or columns). We set `scales = "free_y"` to remove 
+unnecessary y axis labels.
+
+```{r}
+multiverse_table['has_is_married'] <- ifelse(ie_table$is_married, 
+                                             "Includes is_married", "")
+
+ggplot(multiverse_table, aes(y = Model)) +
+  geom_point(aes(x = Estimate)) +
+  geom_linerange(aes(xmin = LowerCI, xmax = UpperCI)) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  theme_minimal() +
+  # facet_grid() expects rows and cols wrapped in vars()
+  facet_grid(rows = vars(has_is_married), scales = "free_y")
+```
+
+Suppose you want to highlight the model that includes both `is_married` and
+`payment_income_ratio`. You can use `&` to combine more than one logical checks
+to check that all of them are true. 
+
+```{r}
+multiverse_table['has_both'] <- ifelse(ie_table$is_married & 
+                                         ie_table$payment_income_ratio,
+                                       "Includes both", "")
+
+ggplot(multiverse_table, aes(y = Model)) +
+  geom_point(aes(x = Estimate)) +
+  geom_linerange(aes(xmin = LowerCI, xmax = UpperCI)) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  theme_minimal() +
+  # facet_grid() expects rows and cols wrapped in vars()
+  facet_grid(rows = vars(has_both), scales = "free_y")
+```
+
+We may want to use short forms for the y-axis labels instead of including the
+full formulae. We can create a new column with `paste()` to create a numbered
+label for the models. You can use `factor()` to keep the ordering.
+
+```{r}
+multiverse_table["Model_label"] <- factor(
+  paste("Model", 1:4),
+  # define levels according to the order of `Estimate`
+  levels = paste("Model", 1:4)[order(multiverse_table$Estimate)]
+  )
+ggplot(multiverse_table, aes(y = Model_label)) +
+  geom_point(aes(x = Estimate)) +
+  geom_linerange(aes(xmin = LowerCI, xmax = UpperCI)) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  theme_minimal() +
+  # facet_grid() expects rows and cols wrapped in vars()
+  facet_grid(rows = vars(has_both), scales = "free_y")
+```
+
+
+> In all 4 models fitted in the multiverse analysis, we do not find 
+statistically significant evidence that an applicant's sex was relevant in the 
+probability of approval for their mortgage application. The multiverse analysis
+further strengthened our conclusion from the simple linear regression analysis
+with no covariates. However, it's worth noting that including the information
+about an applicant's marital status visibly increased the estimated effect
+size. 
+
+Indeed, you will see that the larger multiverse analysis in the following 
+activity consists of results that are both statistically significant and not.
+
+> Knit the current document by clicking `knit` button at the top ro pressing
+`Shift + Ctrl + K`. Proceed back to the Quercus quiz. For the following 
+activity, keep the rendered `tutorial.html` document open for reference.
